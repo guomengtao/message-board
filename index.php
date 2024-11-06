@@ -1,23 +1,35 @@
 <?php
 $db = new SQLite3('messages.db');
 
-// 处理留言提交
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['message'])) {
-    $message = substr($_POST['message'], 0, 1000);
-    $message = SQLite3::escapeString($message);
-    $query = "INSERT INTO messages (content) VALUES ('$message')";
-    $db->exec($query);
-    
-    // 返回JSON响应而不是��定向
-    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
-        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-        $response = array(
-            'success' => true,
-            'message' => '留言成功'
-        );
-        header('Content-Type: application/json');
-        echo json_encode($response);
-        exit;
+// 处理留言提交和回复
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action']) && $_POST['action'] === 'reply') {
+        // 处理回复
+        $content = $_POST['content'] ?? '';
+        $parent_id = (int)($_POST['parent_id'] ?? 0);
+        
+        if ($content && $parent_id) {
+            $content = SQLite3::escapeString($content);
+            $query = "INSERT INTO messages (content, parent_id) VALUES ('$content', $parent_id)";
+            $success = $db->exec($query);
+            
+            header('Content-Type: application/json');
+            echo json_encode(['success' => $success]);
+            exit;
+        }
+    } elseif (!empty($_POST['message'])) {
+        // 处理主留言
+        $message = substr($_POST['message'], 0, 1000);
+        $message = SQLite3::escapeString($message);
+        $query = "INSERT INTO messages (content) VALUES ('$message')";
+        $success = $db->exec($query);
+        
+        if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => $success]);
+            exit;
+        }
     }
 }
 
@@ -26,12 +38,28 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $per_page = 10;
 $offset = ($page - 1) * $per_page;
 
-// 获取总留言数和总页数
-$total_messages = $db->querySingle("SELECT COUNT(*) FROM messages");
+// 获取总留言数和总页数（只计算未隐藏的留言）
+$total_messages = $db->querySingle("SELECT COUNT(*) FROM messages WHERE is_hidden = 0 AND parent_id IS NULL");
 $total_pages = ceil($total_messages / $per_page);
 
-// 获取当前页的留言列表
-$messages = $db->query("SELECT * FROM messages ORDER BY created_at DESC LIMIT $per_page OFFSET $offset");
+// 获取当前页的留言列表（只显示未隐藏的留和它们的回复）
+$messages = $db->query("
+    SELECT m1.*, 
+           GROUP_CONCAT(
+               json_object(
+                   'content', m2.content,
+                   'created_at', m2.created_at,
+                   'is_admin', m2.is_admin
+               )
+           ) as replies
+    FROM messages m1
+    LEFT JOIN messages m2 ON m1.id = m2.parent_id
+    WHERE m1.parent_id IS NULL 
+    AND m1.is_hidden = 0
+    GROUP BY m1.id
+    ORDER BY m1.created_at DESC 
+    LIMIT $per_page OFFSET $offset
+");
 ?>
 
 <!DOCTYPE html>
@@ -456,6 +484,60 @@ $messages = $db->query("SELECT * FROM messages ORDER BY created_at DESC LIMIT $p
         #btn-bootstrap {
             background: #0d6efd;
         }
+
+        .message-item {
+            transition: margin-left 0.3s ease;
+        }
+        
+        .reply-form {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.05);
+            border-radius: 5px;
+        }
+        
+        .reply-actions {
+            margin-top: 10px;
+        }
+        
+        .btn-reply {
+            background: var(--accent-color);
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        
+        .admin-badge {
+            background: var(--accent-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            margin-right: 5px;
+        }
+        
+        .form-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .reply-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(var(--accent-color-rgb), 0.1);
+            border-left: 3px solid var(--accent-color);
+            border-radius: 4px;
+        }
+        
+        .reply-meta {
+            font-size: 0.8em;
+            color: var(--secondary-color);
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body class="theme-modern">
@@ -486,10 +568,57 @@ $messages = $db->query("SELECT * FROM messages ORDER BY created_at DESC LIMIT $p
 
     <div class="message-list">
         <h2>所有留言</h2>
-        <?php while ($row = $messages->fetchArray()): ?>
+        <?php while ($row = $messages->fetchArray(SQLITE3_ASSOC)): ?>
             <div class="message-item">
-                <p><?php echo nl2br(htmlspecialchars($row['content'])); ?></p>
-                <small>发布时间：<?php echo $row['created_at']; ?></small>
+                <!-- 主留言 -->
+                <div class="message-content">
+                    <?php echo nl2br(htmlspecialchars($row['content'])); ?>
+                </div>
+                <div class="message-meta">
+                    发布时间：<?php echo $row['created_at']; ?>
+                </div>
+
+                <!-- 回复列表 -->
+                <?php 
+                if ($row['replies']) {
+                    $replies = json_decode('[' . $row['replies'] . ']', true);
+                    if (is_array($replies)) {
+                        foreach ($replies as $reply): 
+                            if (isset($reply['content']) && isset($reply['created_at'])):
+                ?>
+                    <div class="reply-item">
+                        <div class="reply-content">
+                            <?php if (isset($reply['is_admin']) && $reply['is_admin']): ?>
+                                <span class="admin-badge">管理员回复</span>
+                            <?php endif; ?>
+                            <?php echo nl2br(htmlspecialchars($reply['content'] ?? '')); ?>
+                        </div>
+                        <div class="reply-meta">
+                            回复时间：<?php echo htmlspecialchars($reply['created_at'] ?? '未知时间'); ?>
+                        </div>
+                    </div>
+                <?php 
+                            endif;
+                        endforeach;
+                    }
+                }
+                ?>
+
+                <!-- 回复按钮和表单 -->
+                <div class="reply-actions">
+                    <button onclick="showReplyForm(<?php echo $row['id']; ?>)" class="btn-reply">
+                        回复
+                    </button>
+                    <div id="reply-form-<?php echo $row['id']; ?>" class="reply-form" style="display: none;">
+                        <form method="POST" class="reply-message-form" onsubmit="return submitReply(event, <?php echo $row['id']; ?>)">
+                            <textarea name="content" placeholder="请输入回复内容..." required maxlength="1000"></textarea>
+                            <div class="form-actions">
+                                <button type="submit">提交回复</button>
+                                <button type="button" onclick="hideReplyForm(<?php echo $row['id']; ?>)">取消</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         <?php endwhile; ?>
     </div>
@@ -632,6 +761,45 @@ $messages = $db->query("SELECT * FROM messages ORDER BY created_at DESC LIMIT $p
                 switchTheme(savedTheme);
             }
         });
+
+        function showReplyForm(id) {
+            document.querySelectorAll('.reply-form').forEach(form => form.style.display = 'none');
+            document.getElementById(`reply-form-${id}`).style.display = 'block';
+        }
+
+        function hideReplyForm(id) {
+            document.getElementById(`reply-form-${id}`).style.display = 'none';
+        }
+
+        function submitReply(event, parentId) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            formData.append('action', 'reply');
+            formData.append('parent_id', parentId);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload(); // 刷新页面显示新回复
+                } else {
+                    alert('回复失败，请重试');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('提交失败，请重试');
+            });
+            
+            return false;
+        }
     </script>
 </body>
 </html> 
