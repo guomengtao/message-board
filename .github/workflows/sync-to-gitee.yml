@@ -1,8 +1,7 @@
 name: Sync to Gitee
 
 on:
-  push:
-    branches: [main]
+
 
 jobs:
   sync:
