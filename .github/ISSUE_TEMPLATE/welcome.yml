@@ -1,0 +1,7 @@
+name: Bug Report
+description: 提交 Bug 或问题反馈
+title: "[BUG]"
+labels: bug
+assignees: ""
+about: |
+  欢迎提交 Bug！请尽量提供重现步骤、截图以及相关信息，以便我们更快定位问题。
