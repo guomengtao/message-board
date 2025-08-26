@@ -1,0 +1,40 @@
+# GitHub Sponsors: 支持最多 4 个账号
+github:
+  - guomengtao
+
+# Patreon: 支持单个账号
+patreon: guomengtao
+
+# Open Collective: 支持单个账号
+open_collective: guomengtao
+
+# Ko-fi: 支持单个账号
+ko_fi: guomengtao
+
+# Tidelift: 支持单个项目
+tidelift: laravel/message-board
+
+# Community Bridge: 支持单个项目
+community_bridge: message-board
+
+# Liberapay: 支持单个账号
+liberapay: guomengtao
+
+# IssueHunt: 支持单个账号
+issuehunt: guomengtao
+
+# LFX Crowdfunding: 支持单个项目
+lfx_crowdfunding: message-board
+
+# Polar: 支持单个账号
+polar: guomengtao
+
+# Buy Me a Coffee: 支持单个账号
+buy_me_a_coffee: guomengtao
+
+# thanks.dev: 支持单个账号
+thanks_dev: guomengtao
+
+# 自定义资助链接，可最多 4 个
+custom:
+  - 'https://example.com/donate'
