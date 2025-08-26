@@ -1,0 +1,29 @@
+blank_issues_enabled: false  # 不允许创建空白 Issue
+contact_links:
+  - name: 联系我们
+    url: https://github.com/guomengtao/message-board/issues
+    about: 如果你遇到问题或者有建议，可以通过这里联系管理员
+    icon: "message"
+
+# 指定模板展示顺序
+issue_template:
+  - name: 欢迎新想法
+    description: 用于提交新想法或建议
+    about: 欢迎提交你的创意或功能请求，管理员会及时查看
+    title: "[Idea] "
+    labels: ["idea", "enhancement"]  # 自动打上标签
+    assignees: ["guomengtao"]       # 默认指派管理员
+
+  - name: Bug 报告
+    description: 用于提交问题或错误报告
+    about: 如果发现问题，请详细描述操作步骤
+    title: "[BUG] "
+    labels: ["bug"]
+    assignees: ["guomengtao"]
+
+  - name: 功能请求
+    description: 提出功能改进或新增功能
+    about: 描述你的功能需求，便于评估实现
+    title: "[Feature] "
+    labels: ["enhancement"]
+    assignees: ["guomengtao"]
