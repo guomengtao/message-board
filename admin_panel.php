@@ -339,6 +339,25 @@ if (isset($_GET['fetch']) && $_GET['fetch'] === 'latest') {
             background: var(--success-color) !important;
             color: white !important;
         }
+
+        .anonymous-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            color: #856404;
+            font-size: 14px;
+        }
+
+        .warning-icon {
+            margin-right: 5px;
+            font-size: 16px;
+        }
+
+        .anonymous-warning strong {
+            color: #d63031;
+        }
         
     </style>
 </head>
@@ -362,6 +381,12 @@ if (isset($_GET['fetch']) && $_GET['fetch'] === 'latest') {
                 <!-- 主留言 -->
                 <div class="message-content">
                     <?php echo nl2br(htmlspecialchars($message['content'])); ?>
+                    <?php if ($message['is_anonymous']): ?>
+                        <div class="anonymous-warning">
+                            <span class="warning-icon">⚠️</span>
+                            <strong>匿名留言提醒：</strong>此留言为匿名发布，回复后用户无法看到
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <div class="message-meta">
                     发布时间：<?php echo $message['created_at']; ?>

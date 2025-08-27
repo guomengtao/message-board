@@ -15,6 +15,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
     is_hidden INTEGER DEFAULT 0,
+    is_anonymous INTEGER DEFAULT 0,
     parent_id INTEGER DEFAULT NULL,
     is_admin INTEGER DEFAULT 0,
     reply_level INTEGER DEFAULT 0,

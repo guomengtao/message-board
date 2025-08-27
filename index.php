@@ -21,7 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 处理主留言
         $message = substr($_POST['message'], 0, 1000);
         $message = SQLite3::escapeString($message);
-        $query = "INSERT INTO messages (content) VALUES ('$message')";
+        
+        // 检查是否为匿名留言
+        $is_anonymous = isset($_POST['is_anonymous']) ? 1 : 0;
+        
+        $query = "INSERT INTO messages (content, is_anonymous) VALUES ('$message', $is_anonymous)";
         $success = $db->exec($query);
         
         if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
@@ -38,11 +42,11 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $per_page = 10;
 $offset = ($page - 1) * $per_page;
 
-// 获取总留言数和总页数（只计算未隐藏的留言）
-$total_messages = $db->querySingle("SELECT COUNT(*) FROM messages WHERE is_hidden = 0 AND parent_id IS NULL");
+// 获取总留言数和总页数（只计算未隐藏且非匿名的留言）
+$total_messages = $db->querySingle("SELECT COUNT(*) FROM messages WHERE is_hidden = 0 AND parent_id IS NULL AND is_anonymous = 0");
 $total_pages = ceil($total_messages / $per_page);
 
-// 获取当前页的留言列表（只显示未隐藏的留和它们的回复）
+// 获取当前页的留言列表（只显示未隐藏且非匿名的留言）
 $messages = $db->query("
     SELECT m1.*, 
            GROUP_CONCAT(
@@ -56,6 +60,7 @@ $messages = $db->query("
     LEFT JOIN messages m2 ON m1.id = m2.parent_id
     WHERE m1.parent_id IS NULL 
     AND m1.is_hidden = 0
+    AND m1.is_anonymous = 0
     GROUP BY m1.id
     ORDER BY m1.created_at DESC 
     LIMIT $per_page OFFSET $offset
@@ -235,6 +240,12 @@ $messages = $db->query("
             h1 {
                 font-size: 2em;
             }
+
+            .form-controls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
         }
 
         /* 当前的默认风格，命名为 theme-modern */
@@ -285,7 +296,66 @@ $messages = $db->query("
             padding: 10px;
             border-radius: 30px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
         }
+
+        .theme-switcher {
+            width: 60px;
+            overflow: hidden;
+            background: transparent;
+            border: none;
+            transition: width 0.3s ease;
+            backdrop-filter: none;
+        }
+
+        .theme-switcher.expanded {
+            width: 400px;
+        }
+
+        .theme-switcher .theme-btn:not(.toggle-btn) {
+            opacity: 0;
+            transform: translateX(20px);
+            pointer-events: none;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .theme-switcher.expanded .theme-btn:not(.toggle-btn) {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: auto;
+        }
+
+        .toggle-btn {
+            background: transparent !important;
+            color: var(--accent-color) !important;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            position: relative;
+            z-index: 1001;
+            text-align: center;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+
+
+        .toggle-btn:hover {
+            color: var(--secondary-color) !important;
+            transform: scale(1.05);
+        }
+
+
+
+        /* 添加提示动画 */
+
 
         .theme-btn {
             width: 30px;
@@ -538,10 +608,57 @@ $messages = $db->query("
             color: var(--secondary-color);
             margin-top: 5px;
         }
+
+        .form-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 15px 0;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .char-counter {
+            color: var(--secondary-color);
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+
+        .form-options {
+            display: flex;
+            align-items: center;
+        }
+
+        .anonymous-checkbox {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--secondary-color);
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .anonymous-checkbox input[type="checkbox"] {
+            margin-right: 8px;
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent-color);
+        }
+
+        .anonymous-checkbox:hover {
+            color: var(--accent-color);
+        }
+
+        .anonymous-checkbox input[type="checkbox"]:checked + .checkmark {
+            color: var(--accent-color);
+            font-weight: 500;
+        }
     </style>
 </head>
 <body class="theme-modern">
     <div class="theme-switcher">
+        <div class="toggle-btn" title="展开主题选择">主题</div>
         <div id="btn-modern" class="theme-btn active" title="现代风格"></div>
         <div id="btn-dark" class="theme-btn" title="暗黑风格"></div>
         <div id="btn-forest" class="theme-btn" title="森林风格"></div>
@@ -558,9 +675,18 @@ $messages = $db->query("
         <form method="POST" id="message-form">
             <textarea name="message" id="message" placeholder="请输入留言内容..." 
                       maxlength="1000" required></textarea>
-            <div class="char-counter">
-                已输入: <span id="char-count">0</span> 字
-                还可输入: <span id="char-remaining">1000</span> 字
+            <div class="form-controls">
+                <div class="char-counter">
+                    已输入: <span id="char-count">0</span> 字
+                    还可输入: <span id="char-remaining">1000</span> 字
+                </div>
+                <div class="form-options">
+                    <label class="anonymous-checkbox">
+                        <input type="checkbox" name="is_anonymous" id="is_anonymous">
+                        <span class="checkmark"></span>
+                        匿名留言（仅管理员可见）
+                    </label>
+                </div>
             </div>
             <button type="submit">提交留言</button>
         </form>
@@ -671,6 +797,8 @@ $messages = $db->query("
             e.preventDefault();
             
             const textarea = document.getElementById('message');
+            const isAnonymous = document.getElementById('is_anonymous').checked;
+            
             if (!textarea.value.trim()) {
                 return;
             }
@@ -687,30 +815,39 @@ $messages = $db->query("
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // 创建新留言元素
-                    const messageList = document.querySelector('.message-list');
-                    const newMessage = document.createElement('div');
-                    newMessage.className = 'message-item new-message';
-                    newMessage.style.opacity = '1';
-                    
-                    const now = new Date().toLocaleString();
-                    newMessage.innerHTML = `
-                        <p>${textarea.value.replace(/\n/g, '<br>')}</p>
-                        <small>发布时间：${now}</small>
-                    `;
+                    // 如果是匿名留言，不显示在前台
+                    if (!isAnonymous) {
+                        // 创建新留言元素
+                        const messageList = document.querySelector('.message-list');
+                        const newMessage = document.createElement('div');
+                        newMessage.className = 'message-item new-message';
+                        newMessage.style.opacity = '1';
+                        
+                        const now = new Date().toLocaleString();
+                        newMessage.innerHTML = `
+                            <p>${textarea.value.replace(/\n/g, '<br>')}</p>
+                            <small>发布时间：${now}</small>
+                        `;
 
-                    // 插入到留言列表开头
-                    const firstMessage = messageList.querySelector('.message-item');
-                    if (firstMessage) {
-                        messageList.insertBefore(newMessage, firstMessage);
-                    } else {
-                        messageList.appendChild(newMessage);
+                        // 插入到留言列表开头
+                        const firstMessage = messageList.querySelector('.message-item');
+                        if (firstMessage) {
+                            messageList.insertBefore(newMessage, firstMessage);
+                        } else {
+                            messageList.appendChild(newMessage);
+                        }
                     }
 
-                    // 清空输入框
+                    // 清空输入框和复选框
                     textarea.value = '';
+                    document.getElementById('is_anonymous').checked = false;
                     charCount.textContent = '0';
                     charRemaining.textContent = '1000';
+                    
+                    // 显示提交成功提示
+                    if (isAnonymous) {
+                        alert('匿名留言提交成功！该留言仅管理员可见。');
+                    }
                 }
             })
             .catch(error => {
@@ -742,23 +879,50 @@ $messages = $db->query("
             });
             document.getElementById(`btn-${themeName}`).classList.add('active');
             
+            // 更新齿轮按钮颜色为当前主题的强调色
+            const toggleBtn = document.querySelector('.toggle-btn');
+            if (toggleBtn) {
+                toggleBtn.style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent-color');
+            }
+            
             // 保存主题选择到 localStorage
             localStorage.setItem('preferred-theme', themeName);
         }
 
-        // 初始化主题切换按钮
-        document.querySelectorAll('.theme-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const themeName = this.id.replace('btn-', '');
-                switchTheme(themeName);
-            });
-        });
-
-        // 加载保存的主题
+        // 初始化主题切换按钮和切换功能
         document.addEventListener('DOMContentLoaded', function() {
+            // 初始化主题切换按钮
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                if (btn.classList.contains('toggle-btn')) return; // 跳过切换按钮
+                
+                btn.addEventListener('click', function() {
+                    const themeName = this.id.replace('btn-', '');
+                    switchTheme(themeName);
+                });
+            });
+
+            // 添加切换按钮功能
+            const toggleBtn = document.querySelector('.toggle-btn');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const themeSwitcher = document.querySelector('.theme-switcher');
+                    
+                    // 简单切换展开/收起状态
+                    themeSwitcher.classList.toggle('expanded');
+                });
+            }
+
+            // 加载保存的主题
             const savedTheme = localStorage.getItem('preferred-theme');
             if (savedTheme) {
                 switchTheme(savedTheme);
+            } else {
+                // 如果没有保存的主题，设置齿轮按钮为默认主题颜色
+                if (toggleBtn) {
+                    toggleBtn.style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent-color');
+                }
             }
         });
 
