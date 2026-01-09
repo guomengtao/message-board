@@ -1,5 +1,0 @@
-blank_issues_enabled: true
-contact_links:
-  - name: 欢迎新成员
-    url: .github/ISSUE_TEMPLATE/welcome.yml
-    about: 使用这个模板了解社区指南
